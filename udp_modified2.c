@@ -9,23 +9,17 @@
 // gcc -lpcap udp.c -o udp
 //
 // 
-
 #include <unistd.h>
-
 #include <stdio.h>
-
 #include <sys/socket.h>
-
 #include <netinet/ip.h>
-
 #include <netinet/udp.h>
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <libnet.h>
-       #include <arpa/inet.h>
-// The packet length
+#include <arpa/inet.h>
 
 #define PCKT_LEN 8192
 #define FLAG_R 0x8400
@@ -99,7 +93,7 @@ struct RES_RECORD
     unsigned char *name;
     unsigned short type;
     unsigned short class;
-    unsigned int ttl;
+    unsigned char ttl;
     unsigned short rdlength;
     unsigned char *rdata;
 };
@@ -191,7 +185,7 @@ void dns_q(int argc, char* argv[]) {
     struct dnsheader *dns=(struct dnsheader*) (buffer +sizeof(struct ipheader)+sizeof(struct udpheader));
 
     // data is the pointer points to the first byte of the dns payload  
-    char *data=(buffer +sizeof(struct ipheader)+sizeof(struct udpheader)+sizeof(struct dnsheader));
+    unsigned char *data=(buffer +sizeof(struct ipheader)+sizeof(struct udpheader)+sizeof(struct dnsheader));
 
 
 
@@ -372,7 +366,7 @@ void dns_a(int argc, char* argv[]) {
     struct dnsheader *dns=(struct dnsheader*) (buffer +sizeof(struct ipheader)+sizeof(struct udpheader));
 
     // data is the pointer points to the first byte of the dns payload  
-    char *data=(buffer +sizeof(struct ipheader)+sizeof(struct udpheader)+sizeof(struct dnsheader));
+    unsigned char *data=(buffer +sizeof(struct ipheader)+sizeof(struct udpheader)+sizeof(struct dnsheader));
 
 
 	dns->flags=htons(FLAG_R);
@@ -399,7 +393,7 @@ void dns_a(int argc, char* argv[]) {
 
     struct RES_RECORD* answer=(struct RES_RECORD*)(end+sizeof(struct dataEnd));
     printf("answer = %d\n", answer);
-    printf("answer - end = %d\n", *(answer - end));
+    //printf("answer - end = %d\n", *(answer - end));
     answer->name = "test.com";
     answer->type=htons(1);
     answer->class=htons(1);
@@ -461,9 +455,7 @@ void dns_a(int argc, char* argv[]) {
     ip->iph_tos = 0; // Low delay
 
 
-    unsigned short int packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)); // length + dataEnd_size == UDP_payload_size
-    //printf("Packet length = %d\n", packetLength);
-    packetLength = packetLength + sizeof(struct RES_RECORD);
+    unsigned short int packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD)); // length + dataEnd_size == UDP_payload_size
     //printf("Packet length = %d\n", packetLength);
     ip->iph_len=htons(packetLength);
 
@@ -489,7 +481,7 @@ void dns_a(int argc, char* argv[]) {
     udp->udph_destport = htons(53);
 
 
-    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)); // udp_header_size + udp_payload_size
+    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD)); // udp_header_size + udp_payload_size
 
     ip->iph_chksum = csum((unsigned short *)buffer, sizeof(struct ipheader) + sizeof(struct udpheader));
  
