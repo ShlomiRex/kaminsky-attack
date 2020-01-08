@@ -102,30 +102,12 @@ unsigned short csum(unsigned short *buf, int nwords)
     return (unsigned short)(~sum);
 }
 
+//doesn't send DNS query, only writes to buffer
 //write to dst_buffer the actual packet.
-void dns_q(char *src_ip, char* dst_ip, char *query, char *dst_buffer) 
+//write to dst_pcktLen the length in bytes to send (dst_buffer size)
+void dns_q(char *src_ip, char* dst_ip, char *query, char *dst_buffer, unsigned short *dst_pcktLen) 
 {
-
-    // socket descriptor
-    int sd;
-    // Create a raw socket with UDP protocol
-    sd = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
-    if(sd<0 ) // if socket fails to be created 
-        printf("socket error\n");
-
-
-
-    int one = 1;
-    const int *val = &one;
-    // Inform the kernel do not fill up the packet structure. we will build our own...
-    if(setsockopt(sd, IPPROTO_IP, IP_HDRINCL, val, sizeof(one))<0 ) {
-        printf("error\n");	
-        exit(-1);
-    }
-
-    // buffer to hold the packet - we write to this! This is the actual bytes
-    char buffer[PCKT_LEN];
-    memset(buffer, 0, PCKT_LEN);
+    char *buffer = dst_buffer;
 
     //Pointer to buffer for writing to spesific memory location to create packet
     struct ipheader *ip = (struct ipheader *)  buffer;
@@ -141,7 +123,6 @@ void dns_q(char *src_ip, char* dst_ip, char *query, char *dst_buffer)
 
     //query string
     strcpy(data, query);
-    //query string 
     int query_s = strlen(data)+1;
 
     struct dataEnd *end=(struct dataEnd *)(data+query_s);
@@ -149,50 +130,31 @@ void dns_q(char *src_ip, char* dst_ip, char *query, char *dst_buffer)
     end->type=htons(1); 
     end->class=htons(1);
 
-    struct sockaddr_in sin, din;
-    
-
-
-    // The address family
-    sin.sin_family = AF_INET;
-    din.sin_family = AF_INET;
-
-    // Port numbers
-    sin.sin_port = htons(33333);
-    din.sin_port = htons(53);
-
-    // IP addresses
-    sin.sin_addr.s_addr = inet_addr(dst_ip); // this is the second argument we input into the program
-    din.sin_addr.s_addr = inet_addr(src_ip); // this is the first argument we input into the program
     ip->iph_ihl = 5;
-    ip->iph_ver = 4;
+    ip->iph_ver = 4; //IPv4
     ip->iph_tos = 0; // Low delay
     ip->iph_ident = htons(rand()); // we give a random number for the identification#
     ip->iph_ttl = 110; // hops
     ip->iph_protocol = 17; // UDP
-    unsigned short int packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+query_s+sizeof(struct dataEnd)); // length + dataEnd_size == UDP_payload_size
+    ip->iph_sourceip = inet_addr(src_ip);
+    ip->iph_destip = inet_addr(dst_ip);
+
+    unsigned short packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+query_s+sizeof(struct dataEnd)); // length + dataEnd_size == UDP_payload_size
     ip->iph_len=htons(packetLength);
 
-
-    // Source IP address, can use spoofed address here!!!
-    ip->iph_sourceip = inet_addr(src_ip);
-    // The destination IP address
-    ip->iph_destip = inet_addr(dst_ip);
     udp->udph_srcport = htons(40000+rand()%10000);  // source port number 40k-50k
-
-    // Destination port number
     udp->udph_destport = htons(53);
     udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+query_s+sizeof(struct dataEnd)); // udp_header_size + udp_payload_size
+
+    //finilize with check sum
     ip->iph_chksum = csum((unsigned short *)buffer, sizeof(struct ipheader) + sizeof(struct udpheader));
     udp->udph_chksum=check_udp_sum(buffer, packetLength-sizeof(struct ipheader));
 
-    if(sendto(sd, buffer, packetLength, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0)
-        printf("packet send error %d", errno);
-    
-    printf("Packet length: %d\n", packetLength);
+    //finnaly, the packet is ready!
     memcpy(dst_buffer, buffer, packetLength);
-    close(sd);
+    *dst_pcktLen = packetLength;   
 }
+
 
 int main(int argc, char** argv) {
     if(argc != 3){
@@ -200,20 +162,56 @@ int main(int argc, char** argv) {
     	exit(-1);
     }
 
+    //prepare socket
+    struct sockaddr_in sin, din;
+    // The address family
+    sin.sin_family = AF_INET;
+    din.sin_family = AF_INET;
+
+
+    // IP addresses
+    sin.sin_addr.s_addr = inet_addr(argv[2]); // this is the second argument we input into the program
+    din.sin_addr.s_addr = inet_addr(argv[1]); // this is the first argument we input into the program
+
+    // Port numbers
+    sin.sin_port = htons(33333);
+    din.sin_port = htons(53);
+
+    // socket descriptor
+    int sd;
+    // Create a raw socket with UDP protocol
+    sd = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
+    if(sd<0 ) // if socket fails to be created 
+        printf("socket error\n");
+    int one = 1;
+    const int *val = &one;
+    // Inform the kernel do not fill up the packet structure. we will build our own...
+    if(setsockopt(sd, IPPROTO_IP, IP_HDRINCL, val, sizeof(one))<0 ) {
+        printf("error\n");	
+        exit(-1);
+    }
+    //
+    //done preparing socket
+    //
+
+
+
 
     // buffer to hold the packet - we write to this! This is the actual bytes
-    char buffer1[PCKT_LEN];
-    memset(buffer1, 0, PCKT_LEN);
-    char buffer2[PCKT_LEN];
-    memset(buffer2, 0, PCKT_LEN);
+    char buffer[PCKT_LEN];
+    memset(buffer, 0, PCKT_LEN);
 
-    dns_q(argv[1], argv[2], "\4test\3com", buffer1);
-    dns_q(argv[1], argv[2], "\4abcd\3com", buffer2);
 
-    for(int i = 0; i < 80; i++) {
-        printf("%x ", buffer1[i]);
+    unsigned short packetLength = 0;
+
+    int i = 0, max_packets = 1;
+    while(i++ < max_packets) {
+        dns_q(argv[1], argv[2], "\3abc\4test\3com", buffer, &packetLength);
+        printf("packet len = %d\n", packetLength);
+        if(sendto(sd, buffer, packetLength, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0)
+            printf("packet send error %d", errno);
     }
-    printf("\n");
+
 
     return 0;
 }
