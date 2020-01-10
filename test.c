@@ -378,7 +378,10 @@ void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer, char *dst_b
     ip->iph_tos = 0; // Low delay
 
 
-    unsigned short int packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD)+length);
+    unsigned short int packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD));
+    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD));
+
+
     //printf("Packet length = %d\n", packetLength);
     ip->iph_len=htons(packetLength);
     ip->iph_ident = htons(rand()); // we give a random number for the identification#
@@ -391,7 +394,6 @@ void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer, char *dst_b
     udp->udph_srcport = htons(40000+rand()%10000);  // source port number, I make them random... remember the lower number may be reserved
     // Destination port number
     udp->udph_destport = htons(53);
-    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD) + length); // udp_header_size + udp_payload_size
     ip->iph_chksum = csum((unsigned short *)buffer, sizeof(struct ipheader) + sizeof(struct udpheader));
     udp->udph_chksum=check_udp_sum(buffer, packetLength-sizeof(struct ipheader));
 
@@ -441,7 +443,11 @@ int main(int argc, char *argv[])
     memset(buffer, 0, PCKT_LEN);
 
     unsigned int packetLength = 0;
+
+
+
     dns_a(src_ip, dst_ip, "\4ABCD\3com", "6.6.6.6", buffer, &packetLength);
+    printf("Packet length: %d\n", packetLength);
 
     if(sendto(sd, buffer, packetLength, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
         printf("packet send error %d which means %s\n",errno,strerror(errno));
