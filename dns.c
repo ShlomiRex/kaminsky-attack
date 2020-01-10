@@ -339,21 +339,22 @@ int main(int argc, char *argv[])
 
     char query[10];
     strcpy(query, "\4aaaa\3com");
-    printf("%s %s\n", "aaaa", "aaaa"+5);
 
     for(int i = 0; i < 5; i++) {
-        //dns_a(src_ip, dst_ip, query, "6.6.6.6", buffer, &packetLength);
-        dns_q(src_ip, dst_ip, query, buffer, &packetLength);
+
+        //randomize query
+        for(int i = 1; i < 5; i++) {
+            query[i] = 'a' + rand() % ('z'-'a');
+        }
+
+        dns_a(src_ip, dst_ip, query, "6.6.6.6", buffer, &packetLength);
+        //dns_q(src_ip, dst_ip, query, buffer, &packetLength);
 
         printf("Query: %s\n", query);
         //printf("Packet length: %d\n", packetLength);
-
+        
         if(sendto(sd, buffer, packetLength, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
             printf("packet send error %d which means %s\n",errno,strerror(errno));
-        }
-
-        for(int i = 1; i < 5; i++) {
-            query[i] = 'a' + rand() % ('z'-'a');
         }
     }
 
