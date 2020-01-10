@@ -70,18 +70,13 @@ struct dataEnd {
 // total udp header length: 8 bytes (=64 bits)
 #pragma pack ( 1 )
 struct RES_RECORD {
-    //compression scheme 4.1.2
-    struct {
-        unsigned short preamble : 2;
-        unsigned short offset : 14;
-    } domain_ptr;
+    unsigned char *name;
     unsigned short type;
     unsigned short class;
     uint32_t ttl;
     unsigned short rdlength;
     unsigned char *rdata;
 };
-
 unsigned int checksum(uint16_t *usBuff, int isize)
 {
 	unsigned int cksum=0;
@@ -144,8 +139,6 @@ void dns_q(int argc, char* argv[])
     	exit(-1);
 
     }
-
-
     // socket descriptor
     int sd;
 
@@ -309,7 +302,7 @@ void dns_q(int argc, char* argv[])
 }
     
 
-void dns_a(int argc, char* argv[]) 
+void dns_a(int argc, char* argv[], char *query, char *ip_answer) 
 {
     if(argc != 3){
     	printf("- Invalid parameters!!!\nPlease enter 2 ip addresses\nFrom first to last:src_IP  dest_IP  \n");
@@ -341,12 +334,8 @@ void dns_a(int argc, char* argv[])
     dns->ANCOUNT=htons(1);
 
     //query string
-    strncpy(data,"\4test\3com", 16);
+    strcpy(data, query);
     int length = strlen(data)+1;
-
-
-
-    //this is for convinience to get the struct type write the 4bytes in a more organized way.
 
     struct dataEnd * end=(struct dataEnd *)(data+length);
     end->type=htons(1);
@@ -358,18 +347,18 @@ void dns_a(int argc, char* argv[])
     //strcpy(data + length + sizeof(struct dataEnd), "\4test\3com");
 
 
-    struct RES_RECORD* answer=(struct RES_RECORD*)(data+length+sizeof(struct dataEnd)+10);
     // printf("Data pointer base : %u\n", (int) data);
     // printf("Data struct pointer base : %u\n", (int) end);
-    // printf("RES Record struct pointer base : %u\n", (int)answer);
 
-    answer->domain_ptr.preamble = 3; //set two bits high
-    answer->domain_ptr.offset = 0; //??
+
+
+    strcpy(data+length+sizeof(struct dataEnd),query);
+    struct RES_RECORD *answer=(struct RES_RECORD*)(data+length+sizeof(struct dataEnd)+length - sizeof(void*));
     answer->type = htons(1);
     answer->class = htons(1);
     answer->ttl = htonl(82400);
     answer->rdlength = htons(4);
-    answer->rdata = inet_addr("6.6.6.6");
+    answer->rdata = inet_addr(ip_answer);
 
     //printf("name offset:      %d name size:      %d\n", (int)&answer->name - (int)answer, strlen(answer->name)+1);
     // printf("type offset:      %d type size:      %d\n", (int)&answer->type - (int)answer, sizeof(answer->type));
@@ -422,7 +411,7 @@ void dns_a(int argc, char* argv[])
     ip->iph_tos = 0; // Low delay
 
 
-    unsigned short int packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD)+length); // length + dataEnd_size == UDP_payload_size
+    unsigned short int packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD)+length);
     //printf("Packet length = %d\n", packetLength);
     ip->iph_len=htons(packetLength);
     ip->iph_ident = htons(rand()); // we give a random number for the identification#
@@ -435,7 +424,7 @@ void dns_a(int argc, char* argv[])
     udp->udph_srcport = htons(40000+rand()%10000);  // source port number, I make them random... remember the lower number may be reserved
     // Destination port number
     udp->udph_destport = htons(53);
-    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD)); // udp_header_size + udp_payload_size
+    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD) + length); // udp_header_size + udp_payload_size
     ip->iph_chksum = csum((unsigned short *)buffer, sizeof(struct ipheader) + sizeof(struct udpheader));
     udp->udph_chksum=check_udp_sum(buffer, packetLength-sizeof(struct ipheader));
     // Inform the kernel do not fill up the packet structure. we will build our own...
@@ -463,7 +452,7 @@ void dns_a(int argc, char* argv[])
 int main(int argc, char *argv[])
 {
     //dns_q(argc, argv);
-    dns_a(argc, argv);
+    dns_a(argc, argv, "\4ABCD\3com", "6.6.6.6");
     return 0;
 }
 
