@@ -302,10 +302,8 @@ void dns_q(int argc, char* argv[])
 }
     
 
-void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer, char *dst_buffer) 
+void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer, char *dst_buffer, unsigned int *dst_packetLength) 
 {
-    // socket descriptor
-    int sd;
 
     char *buffer = dst_buffer;
     // Our own headers' structures
@@ -368,30 +366,9 @@ void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer, char *dst_b
     //     printf("%x ", *(data + i));
     // }
     // printf("\n");
-
-    struct sockaddr_in sin, din;
-    int one = 1;
-    const int *val = &one;
     dns->query_id=rand(); // transaction ID for the query packet, use random #
-    sd = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
 
 
-    if(sd<0 ) // if socket fails to be created 
-        printf("socket error\n");
-
-
-    // The source is redundant, may be used later if needed
-    // The address family
-    sin.sin_family = AF_INET;
-    din.sin_family = AF_INET;
-    // Port numbers
-    sin.sin_port = htons(33333);
-    din.sin_port = htons(53);
-    // IP addresses
-    sin.sin_addr.s_addr = inet_addr(src_ip); // this is the second argument we input into the program
-    din.sin_addr.s_addr = inet_addr(dst_ip); // this is the first argument we input into the program
-
-     
 
     // Fabricate the IP header or we can use the
 
@@ -417,39 +394,60 @@ void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer, char *dst_b
     udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD) + length); // udp_header_size + udp_payload_size
     ip->iph_chksum = csum((unsigned short *)buffer, sizeof(struct ipheader) + sizeof(struct udpheader));
     udp->udph_chksum=check_udp_sum(buffer, packetLength-sizeof(struct ipheader));
-    // Inform the kernel do not fill up the packet structure. we will build our own...
-    if(setsockopt(sd, IPPROTO_IP, IP_HDRINCL, val, sizeof(one))<0 ) {
-        printf("error\n");	
-        exit(-1);
-    }
-    int num_max_packets = 1;
-    int i = 0;
-    while(1) {	
-        if(i >= num_max_packets)
-            break;
-        i++;
-        // int charnumber;
-        // charnumber=1+rand()%5;
-        // *(data+charnumber)+=1;
-        udp->udph_chksum=check_udp_sum(buffer, packetLength-sizeof(struct ipheader)); // recalculate the checksum for the UDP packet
 
-    if(sendto(sd, buffer, packetLength, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0)
-        printf("packet send error %d which means %s\n",errno,strerror(errno));
-    }
-    close(sd);
+
+    udp->udph_chksum=check_udp_sum(buffer, packetLength-sizeof(struct ipheader)); // recalculate the checksum for the UDP packet
+    *dst_packetLength = packetLength;
 }
 
 int main(int argc, char *argv[])
 {
+
+
+    // socket descriptor
+    int sd = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
+
+    if(sd<0 ) // if socket fails to be created 
+        printf("socket error\n");
+
+    // Inform the kernel do not fill up the packet structure. we will build our own...
+    int one = 1;
+    const int *val = &one;
+    if(setsockopt(sd, IPPROTO_IP, IP_HDRINCL, val, sizeof(one))<0 ) {
+        printf("error\n");	
+        exit(-1);
+    }
+
     //dns_q(argc, argv);
     char *src_ip = "127.0.0.1";
     char *dst_ip = "127.0.0.1";
+    struct sockaddr_in sin, din;
+
+    // The source is redundant, may be used later if needed
+    // The address family
+    sin.sin_family = AF_INET;
+    din.sin_family = AF_INET;
+    // Port numbers
+    sin.sin_port = htons(33333);
+    din.sin_port = htons(53);
+    // IP addresses
+    sin.sin_addr.s_addr = inet_addr(src_ip); // this is the second argument we input into the program
+    din.sin_addr.s_addr = inet_addr(dst_ip); // this is the first argument we input into the program
+
+     
     // buffer to hold the packet
     char buffer[PCKT_LEN];
     // set the buffer to 0 for all bytes
     memset(buffer, 0, PCKT_LEN);
 
-    dns_a(src_ip, dst_ip, "\4ABCD\3com", "6.6.6.6", buffer);
+    unsigned int packetLength = 0;
+    dns_a(src_ip, dst_ip, "\4ABCD\3com", "6.6.6.6", buffer, &packetLength);
+
+    if(sendto(sd, buffer, packetLength, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+        printf("packet send error %d which means %s\n",errno,strerror(errno));
+    }
+
+    close(sd);
     return 0;
 }
 
