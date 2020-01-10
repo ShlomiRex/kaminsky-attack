@@ -302,17 +302,12 @@ void dns_q(int argc, char* argv[])
 }
     
 
-void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer) 
+void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer, char *dst_buffer) 
 {
     // socket descriptor
     int sd;
 
-    // buffer to hold the packet
-    char buffer[PCKT_LEN];
-
-    // set the buffer to 0 for all bytes
-    memset(buffer, 0, PCKT_LEN);
-
+    char *buffer = dst_buffer;
     // Our own headers' structures
     struct ipheader *ip = (struct ipheader *) buffer;
     struct udpheader *udp = (struct udpheader *) (buffer + sizeof(struct ipheader));
@@ -449,7 +444,12 @@ int main(int argc, char *argv[])
     //dns_q(argc, argv);
     char *src_ip = "127.0.0.1";
     char *dst_ip = "127.0.0.1";
-    dns_a(src_ip, dst_ip, "\4ABCD\3com", "6.6.6.6");
+    // buffer to hold the packet
+    char buffer[PCKT_LEN];
+    // set the buffer to 0 for all bytes
+    memset(buffer, 0, PCKT_LEN);
+
+    dns_a(src_ip, dst_ip, "\4ABCD\3com", "6.6.6.6", buffer);
     return 0;
 }
 
