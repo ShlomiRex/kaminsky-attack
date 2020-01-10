@@ -302,13 +302,8 @@ void dns_q(int argc, char* argv[])
 }
     
 
-void dns_a(int argc, char* argv[], char *query, char *ip_answer) 
+void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer) 
 {
-    if(argc != 3){
-    	printf("- Invalid parameters!!!\nPlease enter 2 ip addresses\nFrom first to last:src_IP  dest_IP  \n");
-    	exit(-1);
-    }
-
     // socket descriptor
     int sd;
 
@@ -398,8 +393,8 @@ void dns_a(int argc, char* argv[], char *query, char *ip_answer)
     sin.sin_port = htons(33333);
     din.sin_port = htons(53);
     // IP addresses
-    sin.sin_addr.s_addr = inet_addr(argv[2]); // this is the second argument we input into the program
-    din.sin_addr.s_addr = inet_addr(argv[1]); // this is the first argument we input into the program
+    sin.sin_addr.s_addr = inet_addr(src_ip); // this is the second argument we input into the program
+    din.sin_addr.s_addr = inet_addr(dst_ip); // this is the first argument we input into the program
 
      
 
@@ -418,9 +413,9 @@ void dns_a(int argc, char* argv[], char *query, char *ip_answer)
     ip->iph_ttl = 110; // hops
     ip->iph_protocol = 17; // UDP
     // Source IP address, can use spoofed address here!!!
-    ip->iph_sourceip = inet_addr(argv[1]);
+    ip->iph_sourceip = inet_addr(src_ip);
     // The destination IP address
-    ip->iph_destip = inet_addr(argv[2]);
+    ip->iph_destip = inet_addr(dst_ip);
     udp->udph_srcport = htons(40000+rand()%10000);  // source port number, I make them random... remember the lower number may be reserved
     // Destination port number
     udp->udph_destport = htons(53);
@@ -452,7 +447,9 @@ void dns_a(int argc, char* argv[], char *query, char *ip_answer)
 int main(int argc, char *argv[])
 {
     //dns_q(argc, argv);
-    dns_a(argc, argv, "\4ABCD\3com", "6.6.6.6");
+    char *src_ip = "127.0.0.1";
+    char *dst_ip = "127.0.0.1";
+    dns_a(src_ip, dst_ip, "\4ABCD\3com", "6.6.6.6");
     return 0;
 }
 
