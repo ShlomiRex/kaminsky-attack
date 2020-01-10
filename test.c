@@ -299,8 +299,6 @@ void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer, char *dst_b
 
 int main(int argc, char *argv[])
 {
-
-
     // socket descriptor
     int sd = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
 
@@ -331,7 +329,7 @@ int main(int argc, char *argv[])
     sin.sin_addr.s_addr = inet_addr(src_ip); // this is the second argument we input into the program
     din.sin_addr.s_addr = inet_addr(dst_ip); // this is the first argument we input into the program
 
-     
+    
     // buffer to hold the packet
     char buffer[PCKT_LEN];
     // set the buffer to 0 for all bytes
@@ -339,21 +337,26 @@ int main(int argc, char *argv[])
 
     unsigned int packetLength = 0;
 
-    char *query = "\4aaaa\3com";
+    char query[10];
+    strcpy(query, "\4aaaa\3com");
+    printf("%s %s\n", "aaaa", "aaaa"+5);
 
-    // This is to generate different query in xxxxx.example.edu
-    // int charnumber;
-    // charnumber=1+rand()%5;
-    // *(query+charnumber)+=1;
+    for(int i = 0; i < 5; i++) {
+        //dns_a(src_ip, dst_ip, query, "6.6.6.6", buffer, &packetLength);
+        dns_q(src_ip, dst_ip, query, buffer, &packetLength);
 
-    //dns_a(src_ip, dst_ip, query, "6.6.6.6", buffer, &packetLength);
-    dns_q(src_ip, dst_ip, query, buffer, &packetLength);
+        printf("Query: %s\n", query);
+        //printf("Packet length: %d\n", packetLength);
 
-    printf("Packet length: %d\n", packetLength);
+        if(sendto(sd, buffer, packetLength, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+            printf("packet send error %d which means %s\n",errno,strerror(errno));
+        }
 
-    if(sendto(sd, buffer, packetLength, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
-        printf("packet send error %d which means %s\n",errno,strerror(errno));
+        for(int i = 1; i < 5; i++) {
+            query[i] = 'a' + rand() % ('z'-'a');
+        }
     }
+
 
     close(sd);
     return 0;
