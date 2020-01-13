@@ -197,7 +197,21 @@ void dns_q(char *src_ip, char *dst_ip, char *query, char *dst_buffer, unsigned i
     udp->udph_chksum=check_udp_sum(buffer, packetquery_len-sizeof(struct ipheader)); // recalculate the checksum for the UDP packet
     *dst_packetquery_len = packetquery_len;
 }
-    
+
+unsigned int write_question(void *buffer, char *query) {
+    //Query section
+    strcpy(buffer, query);
+    int query_len = strlen(query)+1;
+
+    buffer = buffer + query_len; //Write next bytes
+
+    struct dataEnd * end=(struct dataEnd *)(buffer);
+    end->type=htons(1);
+    end->class=htons(1);
+
+    unsigned int bytes_written = query_len + sizeof( struct dataEnd );
+    return bytes_written;
+}
 
 void dns_a (
     char *src_ip, 
@@ -227,19 +241,11 @@ void dns_a (
     //Points to the last byte written
     void *last_byte = data;
 
-
-    //Query section
-    strcpy(data, query);
     int query_len = strlen(query)+1;
 
-    last_byte += query_len;
-
-    struct dataEnd * end=(struct dataEnd *)(last_byte);
-    end->type=htons(1);
-    end->class=htons(1);
-
-    last_byte += sizeof(struct dataEnd); 
-
+    
+    //Query section
+    last_byte += write_question(last_byte, query);
 
     
     
@@ -296,6 +302,7 @@ void dns_a (
     //printf("ttl offset - class offset = %d\n", ttl_offset - class_offset);
 
     
+    
     //Authorative answer
     {
         dns->NSCOUNT=htons(1);
@@ -304,18 +311,32 @@ void dns_a (
         strcpy(last_byte, "\2ns\7example\3com");
         int ns_len = strlen("\2ns\7example\3com") + 1;
         last_byte += ns_len;
-        
+
         struct RES_RECORD *authorative=(struct RES_RECORD*)(last_byte - sizeof(void*)); //minus sizeof(char *name)
+        //Type
         authorative->type = htons(2); //ns
+        //Class
         authorative->class = htons(1); //inet
+        //TTL
         authorative->ttl = htonl(82400);
-        authorative->rdlength = htons(4);
-        authorative->rdata = inet_addr(ip_answer);
+        last_byte += sizeof(unsigned short) + sizeof(unsigned short) + sizeof(uint32_t);; //type, class, tll
+        //Name
+        char *a = "\1a\12iana-servers\3net";
+        char *b = "\7example\3com";
+        char *c = query;
+        strcpy(last_byte, query);
+        int name_server_len = strlen(query) + 1;
+
+        last_byte += name_server_len;
+
+        //Rd (name server) length
+        authorative->rdlength = htons(name_server_len);
         
         authorative = NULL; //do not use anymore!
-        
     }
+    
 
+    printf("%d\n", (int)last_byte - (int)data);
 
 
 
@@ -330,11 +351,9 @@ void dns_a (
     ip->iph_ver = 4;
     ip->iph_tos = 0; // Low delay
 
-
-    unsigned short int packetquery_len =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+query_len+sizeof(struct dataEnd)+sizeof(struct RES_RECORD) + sizeof(struct RES_RECORD));
-    packetquery_len += 100;
-    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+query_len+sizeof(struct dataEnd)+sizeof(struct RES_RECORD)+ sizeof(struct RES_RECORD));
-    udp->udph_len += 100;
+    last_byte += 10;
+    unsigned short int packetquery_len =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+ (int)last_byte-(int)data );
+    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+query_len+sizeof(struct dataEnd)+(int)last_byte-(int)data);
 
     //printf("Packet query_len = %d\n", packetquery_len);
     ip->iph_len=htons(packetquery_len);
