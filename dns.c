@@ -72,8 +72,7 @@ struct dataEnd {
 #pragma pack ( 1 )
 struct RES_RECORD {
     unsigned char *name;
-    unsigned short type;
-    unsigned short class;
+    struct dataEnd dataend;
     uint32_t ttl;
     unsigned short rdlength;
     unsigned char *rdata;
@@ -223,8 +222,8 @@ unsigned int write_answer(void *buffer, char *query,char *ip_answer) {
     bytes_written += query_len; //query
 
     struct RES_RECORD *answer=(struct RES_RECORD*)(buffer - sizeof(void*)); //minus sizeof(char *name)
-    answer->type = htons(1);
-    answer->class = htons(1);
+    answer->dataend.type = htons(1);
+    answer->dataend.class = htons(1);
     answer->ttl = htonl(82400);
     answer->rdlength = htons(4);
     answer->rdata = inet_addr(ip_answer);
@@ -247,9 +246,10 @@ unsigned int write_authorative_answer(void *buffer) {
 
     struct RES_RECORD *authorative=(struct RES_RECORD*)(buffer - sizeof(void*)); //minus sizeof(char *name)
     //Type
-    authorative->type = htons(2); //ns
+    authorative->dataend.type = htons(2); //ns
+    
     //Class
-    authorative->class = htons(1); //inet
+    authorative->dataend.class = htons(1); //inet
     //TTL
     authorative->ttl = htonl(82400);
     bytes_written += sizeof(unsigned short) + sizeof(unsigned short) + sizeof(uint32_t);; //type, class, tll
@@ -288,12 +288,6 @@ void dns_a (
 
     //standart response
 	dns->flags=htons(FLAG_R);
-    //only 1 query, so the count should be one.
-	dns->QDCOUNT=htons(1);
-    //only 1 answer
-    dns->ANCOUNT=htons(1);
-    //Name Server count
-    dns->NSCOUNT=htons(1);
     //Random transaction ID
     dns->query_id=rand();
 
@@ -307,13 +301,19 @@ void dns_a (
     //Query section
     unsigned int bytes_written_question = write_question(last_byte, query);
     last_byte += bytes_written_question;
+    dns->QDCOUNT=htons(1); //Query count
+
     //Answer section
     unsigned int bytes_written_answer = write_answer(last_byte, query, ip_answer);
-    last_byte += bytes_written_answer;
+    last_byte += bytes_written_answer; 
+    dns->ANCOUNT=htons(1); //Answer count
+
     //Authorative section
-    unsigned int bytes_written_authorative_answer = 0;
     //unsigned int bytes_written_authorative_answer = write_authorative_answer(last_byte);
-    last_byte += bytes_written_authorative_answer;
+    unsigned int bytes_written_authorative_answer = 0;
+    //last_byte += bytes_written_authorative_answer;
+    //dns->NSCOUNT=htons(1); //Name Server count
+    
 
     printf("Question bytes: %d\n", bytes_written_question);
     printf("Answer bytes: %d\n", bytes_written_answer);
