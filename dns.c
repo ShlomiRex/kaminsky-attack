@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <libnet.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 #define PCKT_LEN 8192
 #define FLAG_R 0x8400
@@ -130,7 +131,7 @@ unsigned short csum(unsigned short *buf, int nwords)
 }
 
 
-void dns_q(char *src_ip, char *dst_ip, char *query, char *dst_buffer, unsigned int *dst_packetLength) 
+void dns_q(char *src_ip, char *dst_ip, char *query, char *dst_buffer, unsigned int *dst_packetquery_len) 
 {
     char *buffer = dst_buffer;
     // Our own headers' structures
@@ -157,24 +158,24 @@ void dns_q(char *src_ip, char *dst_ip, char *query, char *dst_buffer, unsigned i
 
     //query string
     strcpy(data,query);
-    int length= strlen(data)+1;
+    int query_len= strlen(data)+1;
 
 
 
     //this is for convinience to get the struct type write the 4bytes in a more organized way.
-    struct dataEnd * end=(struct dataEnd *)(data+length);
+    struct dataEnd * end=(struct dataEnd *)(data+query_len);
     end->type=htons(1);
     end->class=htons(1);
 
     // Fabricate the IP header or we can use the
 
     // standard header structures but assign our own values.
-    unsigned short int packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)); // length + dataEnd_size == UDP_payload_size
+    unsigned short int packetquery_len =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+query_len+sizeof(struct dataEnd)); // query_len + dataEnd_size == UDP_payload_size
 
     ip->iph_ihl = 5;
     ip->iph_ver = 4;
     ip->iph_tos = 0; // Low delay
-    ip->iph_len=htons(packetLength);
+    ip->iph_len=htons(packetquery_len);
     ip->iph_ident = htons(rand()); // we give a random number for the identification#
     ip->iph_ttl = 110; // hops
     ip->iph_protocol = 17; // UDP
@@ -187,14 +188,14 @@ void dns_q(char *src_ip, char *dst_ip, char *query, char *dst_buffer, unsigned i
     // Destination port number
 
     udp->udph_destport = htons(53);
-    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)); // udp_header_size + udp_payload_size
+    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+query_len+sizeof(struct dataEnd)); // udp_header_size + udp_payload_size
 
     ip->iph_chksum = csum((unsigned short *)buffer, sizeof(struct ipheader) + sizeof(struct udpheader));
  
 
-    udp->udph_chksum=check_udp_sum(buffer, packetLength-sizeof(struct ipheader));
-    udp->udph_chksum=check_udp_sum(buffer, packetLength-sizeof(struct ipheader)); // recalculate the checksum for the UDP packet
-    *dst_packetLength = packetLength;
+    udp->udph_chksum=check_udp_sum(buffer, packetquery_len-sizeof(struct ipheader));
+    udp->udph_chksum=check_udp_sum(buffer, packetquery_len-sizeof(struct ipheader)); // recalculate the checksum for the UDP packet
+    *dst_packetquery_len = packetquery_len;
 }
     
 
@@ -204,7 +205,7 @@ void dns_a (
     char *query, 
     char *ip_answer, 
     char *dst_buffer, 
-    unsigned int *dst_packetLength) 
+    unsigned int *dst_packetquery_len) 
 {
 
     char *buffer = dst_buffer;
@@ -223,51 +224,101 @@ void dns_a (
     //only 1 answer
     dns->ANCOUNT=htons(1);
 
-    //query string
-    strcpy(data, query);
-    int length = strlen(data)+1;
+    //Points to the last byte written
+    void *last_byte = data;
 
-    struct dataEnd * end=(struct dataEnd *)(data+length);
+
+    //Query section
+    strcpy(data, query);
+    int query_len = strlen(query)+1;
+
+    last_byte += query_len;
+
+    struct dataEnd * end=(struct dataEnd *)(last_byte);
     end->type=htons(1);
     end->class=htons(1);
 
+    last_byte += sizeof(struct dataEnd); 
 
-    strcpy(data+length+sizeof(struct dataEnd),query);
-    struct RES_RECORD *answer=(struct RES_RECORD*)(data+length+sizeof(struct dataEnd)+length - sizeof(void*));
-    answer->type = htons(1);
-    answer->class = htons(1);
-    answer->ttl = htonl(82400);
-    answer->rdlength = htons(2);
-    answer->rdata = inet_addr(ip_answer);
-
-
-    //struct RES_RECORD *additional = (struct RES_RECORD*)(data+length+sizeof(*end)            +length        - sizeof(void*) +             sizeof(*answer));
-    //                                                   QUERY NAME  ^^ OFFSET OF CLASS+TYPE  ^ DNS ANSWER     ^ OFFSET STRUCT RES_RECORD ^ OFFSET
-
-
-    strcpy(data+length+sizeof(*end)+length        - sizeof(void*) +             sizeof(*answer), "Test");
-    
 
     
+    
+
+    //Answer section
+    {
+        //Name
+        strcpy(last_byte, query);
+        last_byte += query_len;
+
+        struct RES_RECORD *answer=(struct RES_RECORD*)(last_byte - sizeof(void*)); //minus sizeof(char *name)
+        answer->type = htons(1);
+        answer->class = htons(1);
+        answer->ttl = htonl(82400);
+        answer->rdlength = htons(4);
+        answer->rdata = inet_addr(ip_answer);
+
+        answer = NULL; //do not use answer struct anymore!
+    }
+
+    //printf("sizeof(struct RES_RECORD) = %d\n", sizeof(struct RES_RECORD)); //26
+    //printf("ushort = %d\nuchar* = %d\nuint32_t = %d\nchar* = %d\nvoid* = %d\n", sizeof(unsigned short), sizeof(unsigned char*), sizeof(uint32_t), sizeof(char*), sizeof(void*));
+
+    
+    // unsigned char *name;          8     (10)
+    // unsigned short type;          2     
+    // unsigned short class;         2
+    // uint32_t ttl;                 4
+    // unsigned short rdlength;      2
+    // unsigned char *rdata;         8     (4)
+    //                          sum: 26    (24)
+    //wireshark: 26
+
+    //last_byte += sizeof(struct RES_RECORD);//                    26
+    //last_byte -= (sizeof(void*) - 4); //*rdata fix
+
+
+    // last_byte += query_len; //name
+    last_byte += sizeof(unsigned short) * 3; //type + class + rdlength
+    last_byte += sizeof(uint32_t); //ttl
+    last_byte += 4; //size of rdata (4 octets)
+
+    
+
 
     //printf("name offset:      %d name size:      %d\n", (int)&answer->name - (int)answer, strlen(answer->name)+1);
     // printf("type offset:      %d type size:      %d\n", (int)&answer->type - (int)answer, sizeof(answer->type));
     // printf("class offset:     %d class size:     %d\n", (int)&answer->class - (int)answer, sizeof(answer->class));
     // printf("ttl offset:       %d ttl size:       %d\n", (int)&answer->ttl - (int)answer, sizeof(answer->ttl));
-    // printf("rdlength offset:  %d rdlength size:  %d\n", (int)&answer->rdlength - (int)answer, sizeof(answer->rdlength));
+    // printf("rdquery_len offset:  %d rdquery_len size:  %d\n", (int)&answer->rdquery_len - (int)answer, sizeof(answer->rdquery_len));
     // printf("rdata offset:     %d rdata size:     %d\n", (int)&answer->rdata - (int)answer, sizeof(answer->rdata));
     // int class_offset = (int)&answer->class - (int)answer;
     // int ttl_offset = (int)&answer->ttl - (int)answer;
     //printf("ttl offset - class offset = %d\n", ttl_offset - class_offset);
 
     
+    //Authorative answer
+    {
+        dns->NSCOUNT=htons(1);
 
-    
+        //Name
+        strcpy(last_byte, "\2ns\7example\3com");
+        int ns_len = strlen("\2ns\7example\3com") + 1;
+        last_byte += ns_len;
+        
+        struct RES_RECORD *authorative=(struct RES_RECORD*)(last_byte - sizeof(void*)); //minus sizeof(char *name)
+        authorative->type = htons(2); //ns
+        authorative->class = htons(1); //inet
+        authorative->ttl = htonl(82400);
+        authorative->rdlength = htons(4);
+        authorative->rdata = inet_addr(ip_answer);
+        
+        authorative = NULL; //do not use anymore!
+        
+    }
 
-    // for(int i = 0; i < 50; i++) {
-    //     printf("%x ", *(data + i));
-    // }
-    // printf("\n");
+
+
+
     dns->query_id=rand(); // transaction ID for the query packet, use random #
 
 
@@ -280,12 +331,13 @@ void dns_a (
     ip->iph_tos = 0; // Low delay
 
 
-    unsigned short int packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD) + 5 + sizeof(struct RES_RECORD));
-    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD) + 5 + sizeof(struct RES_RECORD));
+    unsigned short int packetquery_len =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+query_len+sizeof(struct dataEnd)+sizeof(struct RES_RECORD) + sizeof(struct RES_RECORD));
+    packetquery_len += 100;
+    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+query_len+sizeof(struct dataEnd)+sizeof(struct RES_RECORD)+ sizeof(struct RES_RECORD));
+    udp->udph_len += 100;
 
-
-    //printf("Packet length = %d\n", packetLength);
-    ip->iph_len=htons(packetLength);
+    //printf("Packet query_len = %d\n", packetquery_len);
+    ip->iph_len=htons(packetquery_len);
     ip->iph_ident = htons(rand()); // we give a random number for the identification#
     ip->iph_ttl = 110; // hops
     ip->iph_protocol = 17; // UDP
@@ -297,11 +349,11 @@ void dns_a (
     // Destination port number
     udp->udph_destport = htons(53);
     ip->iph_chksum = csum((unsigned short *)buffer, sizeof(struct ipheader) + sizeof(struct udpheader));
-    udp->udph_chksum=check_udp_sum(buffer, packetLength-sizeof(struct ipheader));
+    udp->udph_chksum=check_udp_sum(buffer, packetquery_len-sizeof(struct ipheader));
 
 
-    udp->udph_chksum=check_udp_sum(buffer, packetLength-sizeof(struct ipheader)); // recalculate the checksum for the UDP packet
-    *dst_packetLength = packetLength;
+    udp->udph_chksum=check_udp_sum(buffer, packetquery_len-sizeof(struct ipheader)); // recalculate the checksum for the UDP packet
+    *dst_packetquery_len = packetquery_len;
 }
 
 int main(int argc, char *argv[])
@@ -342,25 +394,27 @@ int main(int argc, char *argv[])
     // set the buffer to 0 for all bytes
     memset(buffer, 0, PCKT_LEN);
 
-    unsigned int packetLength = 0;
+    unsigned int packetquery_len = 0;
 
-    char query[10];
-    strcpy(query, "\4aaaa\3com");
+    char query[18];
+    strcpy(query, "\4abcd\7example\3com");
+
+    srand(time(0)); //use time as seed
 
     for(int i = 0; i < 1; i++) {
 
-        //randomize query
+        //randomize query (first 4 chars of first label)
         for(int i = 1; i < 5; i++) {
-            query[i] = 'a' + rand() % ('z'-'a');
+            query[i] = '1' + rand() % ('9'-'1');
         }
 
-        dns_a(src_ip, dst_ip, query, "6.6.6.6", buffer, &packetLength);
-        //dns_q(src_ip, dst_ip, query, buffer, &packetLength);
+        dns_a(src_ip, dst_ip, query, "6.6.6.6", buffer, &packetquery_len);
+        //dns_q(src_ip, dst_ip, query, buffer, &packetquery_len);
 
         printf("Query: %s\n", query);
-        //printf("Packet length: %d\n", packetLength);
+        //printf("Packet query_len: %d\n", packetquery_len);
         
-        if(sendto(sd, buffer, packetLength, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+        if(sendto(sd, buffer, packetquery_len, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
             printf("packet send error %d which means %s\n",errno,strerror(errno));
         }
     }

@@ -4,6 +4,7 @@
         "inet.h": "c",
         "fcntl.h": "c",
         "errno.h": "c",
-        "udp.h": "c"
+        "udp.h": "c",
+        "time.h": "c"
     }
 }
