@@ -236,35 +236,40 @@ unsigned int write_answer(void *buffer, char *query,char *ip_answer) {
     return bytes_written;
 }
 
-unsigned int write_authorative_answer(void *buffer) {
+unsigned int write_authorative_answer(void *buffer, char *name_server) {
     unsigned int bytes_written = 0;
+
     //Name
-    strcpy(buffer, "\2ns\7example\3com");
-    int ns_len = strlen("\2ns\7example\3com") + 1;
+    strcpy(buffer, name_server);
+    int ns_len = strlen(name_server) + 1;
+    
     buffer += ns_len;
-    bytes_written += ns_len;
+    bytes_written += ns_len; //nameserver
+
 
     struct RES_RECORD *authorative=(struct RES_RECORD*)(buffer - sizeof(void*)); //minus sizeof(char *name)
+
     //Type
     authorative->dataend.type = htons(2); //ns
     
     //Class
     authorative->dataend.class = htons(1); //inet
+
     //TTL
     authorative->ttl = htonl(82400);
-    bytes_written += sizeof(unsigned short) + sizeof(unsigned short) + sizeof(uint32_t);; //type, class, tll
+
     //Rd (name server) length
-    authorative->rdlength = htons(16);
-    /*
-    //Name
-    strcpy(buffer, "\7example\3com");
-    int name_server_len = strlen("\7example\3com") + 1;
+    authorative->rdlength = htons(ns_len);
+    
+    unsigned int sum_bytes = 3 * sizeof(unsigned short) + sizeof(uint32_t); //type, class, tll, rdlength
+    bytes_written += sum_bytes;
+    buffer += sum_bytes;
 
-    last_byte += name_server_len;
-    */
+    //Rdata (Name Server)
+    strcpy(buffer, name_server);
+    bytes_written += ns_len;
 
-
-   return bytes_written;
+    return bytes_written;
     
 }
 
@@ -309,10 +314,10 @@ void dns_a (
     dns->ANCOUNT=htons(1); //Answer count
 
     //Authorative section
-    //unsigned int bytes_written_authorative_answer = write_authorative_answer(last_byte);
-    unsigned int bytes_written_authorative_answer = 0;
-    //last_byte += bytes_written_authorative_answer;
-    //dns->NSCOUNT=htons(1); //Name Server count
+    char *name_server = "\2ns\7example\3com";
+    unsigned int bytes_written_authorative_answer = write_authorative_answer(last_byte, name_server);
+    last_byte += bytes_written_authorative_answer;
+    dns->NSCOUNT=htons(1); //Name Server count
     
 
     printf("Question bytes: %d\n", bytes_written_question);
@@ -321,10 +326,7 @@ void dns_a (
 
     unsigned int bytes_written_sum =  bytes_written_question + bytes_written_answer + bytes_written_authorative_answer;
 
-    printf("Bytes written: %d\n",bytes_written_sum);
-    printf("%d\n", (int)last_byte-(int)data);
-
-
+    printf("Total DNS data bytes written: %d\n",bytes_written_sum);
 
 
 
