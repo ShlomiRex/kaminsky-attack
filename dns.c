@@ -199,7 +199,6 @@ void dns_q(char *src_ip, char *dst_ip, char *query, char *dst_buffer, unsigned i
 }
 
 unsigned int write_question(void *buffer, char *query) {
-    //Query section
     strcpy(buffer, query);
     int query_len = strlen(query)+1;
 
@@ -211,6 +210,62 @@ unsigned int write_question(void *buffer, char *query) {
 
     unsigned int bytes_written = query_len + sizeof( struct dataEnd );
     return bytes_written;
+}
+
+//By given query, write A type DNS answer with given ip_answer
+unsigned int write_answer(void *buffer, char *query,char *ip_answer) {
+    unsigned int bytes_written = 0;
+
+    strcpy(buffer, query);
+    int query_len = strlen(query)+1;
+
+    buffer = buffer + query_len;
+    bytes_written += query_len; //query
+
+    struct RES_RECORD *answer=(struct RES_RECORD*)(buffer - sizeof(void*)); //minus sizeof(char *name)
+    answer->type = htons(1);
+    answer->class = htons(1);
+    answer->ttl = htonl(82400);
+    answer->rdlength = htons(4);
+    answer->rdata = inet_addr(ip_answer);
+
+    
+    bytes_written += sizeof(unsigned short) * 3; //type + class + rdlength
+    bytes_written += sizeof(uint32_t); //ttl
+    bytes_written += 4; //size of rdata (4 octets)
+
+    return bytes_written;
+}
+
+unsigned int write_authorative_answer(void *buffer) {
+    unsigned int bytes_written = 0;
+    //Name
+    strcpy(buffer, "\2ns\7example\3com");
+    int ns_len = strlen("\2ns\7example\3com") + 1;
+    buffer += ns_len;
+    bytes_written += ns_len;
+
+    struct RES_RECORD *authorative=(struct RES_RECORD*)(buffer - sizeof(void*)); //minus sizeof(char *name)
+    //Type
+    authorative->type = htons(2); //ns
+    //Class
+    authorative->class = htons(1); //inet
+    //TTL
+    authorative->ttl = htonl(82400);
+    bytes_written += sizeof(unsigned short) + sizeof(unsigned short) + sizeof(uint32_t);; //type, class, tll
+    //Rd (name server) length
+    authorative->rdlength = htons(16);
+    /*
+    //Name
+    strcpy(buffer, "\7example\3com");
+    int name_server_len = strlen("\7example\3com") + 1;
+
+    last_byte += name_server_len;
+    */
+
+
+   return bytes_written;
+    
 }
 
 void dns_a (
@@ -237,6 +292,11 @@ void dns_a (
 	dns->QDCOUNT=htons(1);
     //only 1 answer
     dns->ANCOUNT=htons(1);
+    //Name Server count
+    dns->NSCOUNT=htons(1);
+    //Random transaction ID
+    dns->query_id=rand();
+
 
     //Points to the last byte written
     void *last_byte = data;
@@ -245,102 +305,26 @@ void dns_a (
 
     
     //Query section
-    last_byte += write_question(last_byte, query);
-
-    
-    
-
+    unsigned int bytes_written_question = write_question(last_byte, query);
+    last_byte += bytes_written_question;
     //Answer section
-    {
-        //Name
-        strcpy(last_byte, query);
-        last_byte += query_len;
+    unsigned int bytes_written_answer = write_answer(last_byte, query, ip_answer);
+    last_byte += bytes_written_answer;
+    //Authorative section
+    unsigned int bytes_written_authorative_answer = 0;
+    //unsigned int bytes_written_authorative_answer = write_authorative_answer(last_byte);
+    last_byte += bytes_written_authorative_answer;
 
-        struct RES_RECORD *answer=(struct RES_RECORD*)(last_byte - sizeof(void*)); //minus sizeof(char *name)
-        answer->type = htons(1);
-        answer->class = htons(1);
-        answer->ttl = htonl(82400);
-        answer->rdlength = htons(4);
-        answer->rdata = inet_addr(ip_answer);
+    printf("Question bytes: %d\n", bytes_written_question);
+    printf("Answer bytes: %d\n", bytes_written_answer);
+    printf("Authorative bytes: %d\n", bytes_written_authorative_answer);
 
-        answer = NULL; //do not use answer struct anymore!
-    }
+    unsigned int bytes_written_sum =  bytes_written_question + bytes_written_answer + bytes_written_authorative_answer;
 
-    //printf("sizeof(struct RES_RECORD) = %d\n", sizeof(struct RES_RECORD)); //26
-    //printf("ushort = %d\nuchar* = %d\nuint32_t = %d\nchar* = %d\nvoid* = %d\n", sizeof(unsigned short), sizeof(unsigned char*), sizeof(uint32_t), sizeof(char*), sizeof(void*));
-
-    
-    // unsigned char *name;          8     (10)
-    // unsigned short type;          2     
-    // unsigned short class;         2
-    // uint32_t ttl;                 4
-    // unsigned short rdlength;      2
-    // unsigned char *rdata;         8     (4)
-    //                          sum: 26    (24)
-    //wireshark: 26
-
-    //last_byte += sizeof(struct RES_RECORD);//                    26
-    //last_byte -= (sizeof(void*) - 4); //*rdata fix
+    printf("Bytes written: %d\n",bytes_written_sum);
+    printf("%d\n", (int)last_byte-(int)data);
 
 
-    // last_byte += query_len; //name
-    last_byte += sizeof(unsigned short) * 3; //type + class + rdlength
-    last_byte += sizeof(uint32_t); //ttl
-    last_byte += 4; //size of rdata (4 octets)
-
-    
-
-
-    //printf("name offset:      %d name size:      %d\n", (int)&answer->name - (int)answer, strlen(answer->name)+1);
-    // printf("type offset:      %d type size:      %d\n", (int)&answer->type - (int)answer, sizeof(answer->type));
-    // printf("class offset:     %d class size:     %d\n", (int)&answer->class - (int)answer, sizeof(answer->class));
-    // printf("ttl offset:       %d ttl size:       %d\n", (int)&answer->ttl - (int)answer, sizeof(answer->ttl));
-    // printf("rdquery_len offset:  %d rdquery_len size:  %d\n", (int)&answer->rdquery_len - (int)answer, sizeof(answer->rdquery_len));
-    // printf("rdata offset:     %d rdata size:     %d\n", (int)&answer->rdata - (int)answer, sizeof(answer->rdata));
-    // int class_offset = (int)&answer->class - (int)answer;
-    // int ttl_offset = (int)&answer->ttl - (int)answer;
-    //printf("ttl offset - class offset = %d\n", ttl_offset - class_offset);
-
-    
-    
-    //Authorative answer
-    {
-        dns->NSCOUNT=htons(1);
-
-        //Name
-        strcpy(last_byte, "\2ns\7example\3com");
-        int ns_len = strlen("\2ns\7example\3com") + 1;
-        last_byte += ns_len;
-
-        struct RES_RECORD *authorative=(struct RES_RECORD*)(last_byte - sizeof(void*)); //minus sizeof(char *name)
-        //Type
-        authorative->type = htons(2); //ns
-        //Class
-        authorative->class = htons(1); //inet
-        //TTL
-        authorative->ttl = htonl(82400);
-        last_byte += sizeof(unsigned short) + sizeof(unsigned short) + sizeof(uint32_t);; //type, class, tll
-        //Name
-        char *a = "\1a\12iana-servers\3net";
-        char *b = "\7example\3com";
-        char *c = query;
-        strcpy(last_byte, query);
-        int name_server_len = strlen(query) + 1;
-
-        last_byte += name_server_len;
-
-        //Rd (name server) length
-        authorative->rdlength = htons(name_server_len);
-        
-        authorative = NULL; //do not use anymore!
-    }
-    
-
-    printf("%d\n", (int)last_byte - (int)data);
-
-
-
-    dns->query_id=rand(); // transaction ID for the query packet, use random #
 
 
 
@@ -352,8 +336,8 @@ void dns_a (
     ip->iph_tos = 0; // Low delay
 
     last_byte += 10;
-    unsigned short int packetquery_len =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+ (int)last_byte-(int)data );
-    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+query_len+sizeof(struct dataEnd)+(int)last_byte-(int)data);
+    unsigned short int packetquery_len =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+ bytes_written_sum );
+    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+bytes_written_sum);
 
     //printf("Packet query_len = %d\n", packetquery_len);
     ip->iph_len=htons(packetquery_len);
