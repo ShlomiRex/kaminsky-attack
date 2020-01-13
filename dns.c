@@ -77,6 +77,7 @@ struct RES_RECORD {
     unsigned short rdlength;
     unsigned char *rdata;
 };
+
 unsigned int checksum(uint16_t *usBuff, int isize)
 {
 	unsigned int cksum=0;
@@ -197,7 +198,13 @@ void dns_q(char *src_ip, char *dst_ip, char *query, char *dst_buffer, unsigned i
 }
     
 
-void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer, char *dst_buffer, unsigned int *dst_packetLength) 
+void dns_a (
+    char *src_ip, 
+    char *dst_ip, 
+    char *query, 
+    char *ip_answer, 
+    char *dst_buffer, 
+    unsigned int *dst_packetLength) 
 {
 
     char *buffer = dst_buffer;
@@ -225,23 +232,23 @@ void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer, char *dst_b
     end->class=htons(1);
 
 
-    //end query layer
-    //start answer layer
-    //strcpy(data + length + sizeof(struct dataEnd), "\4test\3com");
-
-
-    // printf("Data pointer base : %u\n", (int) data);
-    // printf("Data struct pointer base : %u\n", (int) end);
-
-
-
     strcpy(data+length+sizeof(struct dataEnd),query);
     struct RES_RECORD *answer=(struct RES_RECORD*)(data+length+sizeof(struct dataEnd)+length - sizeof(void*));
     answer->type = htons(1);
     answer->class = htons(1);
     answer->ttl = htonl(82400);
-    answer->rdlength = htons(4);
+    answer->rdlength = htons(2);
     answer->rdata = inet_addr(ip_answer);
+
+
+    //struct RES_RECORD *additional = (struct RES_RECORD*)(data+length+sizeof(*end)            +length        - sizeof(void*) +             sizeof(*answer));
+    //                                                   QUERY NAME  ^^ OFFSET OF CLASS+TYPE  ^ DNS ANSWER     ^ OFFSET STRUCT RES_RECORD ^ OFFSET
+
+
+    strcpy(data+length+sizeof(*end)+length        - sizeof(void*) +             sizeof(*answer), "Test");
+    
+
+    
 
     //printf("name offset:      %d name size:      %d\n", (int)&answer->name - (int)answer, strlen(answer->name)+1);
     // printf("type offset:      %d type size:      %d\n", (int)&answer->type - (int)answer, sizeof(answer->type));
@@ -273,8 +280,8 @@ void dns_a(char *src_ip, char *dst_ip, char *query, char *ip_answer, char *dst_b
     ip->iph_tos = 0; // Low delay
 
 
-    unsigned short int packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD));
-    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD));
+    unsigned short int packetLength =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD) + 5 + sizeof(struct RES_RECORD));
+    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+length+sizeof(struct dataEnd)+sizeof(struct RES_RECORD) + 5 + sizeof(struct RES_RECORD));
 
 
     //printf("Packet length = %d\n", packetLength);
@@ -340,7 +347,7 @@ int main(int argc, char *argv[])
     char query[10];
     strcpy(query, "\4aaaa\3com");
 
-    for(int i = 0; i < 5; i++) {
+    for(int i = 0; i < 1; i++) {
 
         //randomize query
         for(int i = 1; i < 5; i++) {
