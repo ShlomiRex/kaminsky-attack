@@ -196,15 +196,15 @@ unsigned int write_answer(void *buffer, char *query,char *ip_answer) {
 
 
 
-unsigned int write_authorative_answer(void *buffer, char *name_server) {
+unsigned int write_authorative_answer(void *buffer, char *query_domain, char *name_server) {
     unsigned int bytes_written = 0;
 
     //Name
-    strcpy(buffer, name_server);
-    int ns_len = strlen(name_server) + 1;
+    strcpy(buffer, query_domain);
+    int q_len = strlen(query_domain) + 1;
     
-    buffer += ns_len;
-    bytes_written += ns_len; //nameserver
+    buffer += q_len;
+    bytes_written += q_len; //name
 
 
     struct RES_RECORD *authorative=(struct RES_RECORD*)(buffer - sizeof(void*)); //minus sizeof(char *name)
@@ -219,6 +219,7 @@ unsigned int write_authorative_answer(void *buffer, char *name_server) {
     authorative->ttl = htonl(82400);
 
     //Rd (name server) length
+    int ns_len = strlen(name_server) + 1;
     authorative->rdlength = htons(ns_len);
     
     unsigned int sum_bytes = 3 * sizeof(unsigned short) + sizeof(uint32_t); //type, class, tll, rdlength
@@ -227,88 +228,12 @@ unsigned int write_authorative_answer(void *buffer, char *name_server) {
 
     //Rdata (Name Server)
     strcpy(buffer, name_server);
-    bytes_written += ns_len;
+    printf("Name server = %s Len = %d\n", name_server, ns_len);
+    bytes_written += ns_len; //nameserver
 
     return bytes_written;
     
 }
-
-//Returns amount of bytes of packet written to dst_buffer
-
-// unsigned int dns_a (
-//     char *src_ip, 
-//     char *dst_ip, 
-//     char *query, 
-//     char *ip_answer, 
-//     char *dst_buffer,
-//     long *txid_ptr) 
-// {
-
-//     char *buffer = dst_buffer;
-//     // Our own headers' structures
-//     struct ipheader *ip = (struct ipheader *) buffer;
-//     ip->iph_ident = htons(rand()); // we give a random number for the identification#
-//     ip->iph_ttl = 110; // hops
-//     ip->iph_protocol = 17; // UDP
-//     ip->iph_sourceip = inet_addr(src_ip);
-//     ip->iph_destip = inet_addr(dst_ip);
-//     ip->iph_ihl = 5;
-//     ip->iph_ver = 4;
-//     ip->iph_tos = 0; // Low delay
-
-//     struct udpheader *udp = (struct udpheader *) (buffer + sizeof(struct ipheader));
-//     udp->udph_srcport = htons(40000+rand()%10000);  // source port number, I make them random... remember the lower number may be reserved
-//     udp->udph_destport = htons(53);
-
-//     struct dnsheader *dns = (struct dnsheader*) (buffer +sizeof(struct ipheader)+sizeof(struct udpheader));
-
-//     // data is the pointer points to the first byte of the dns payload  
-//     unsigned char *data=(buffer +sizeof(struct ipheader)+sizeof(struct udpheader)+sizeof(struct dnsheader));
-
-//     //standart response
-// 	dns->flags=htons(FLAG_R);
-//     //Random transaction ID
-//     dns->query_id=rand();
-
-//     *txid_ptr = &(dns->query_id);
-
-//     //Points to the last byte written
-//     void *last_byte = data;
-
-//     int query_len = strlen(query)+1;
-
-    
-//     //Query section
-//     unsigned int bytes_written_question = write_question(last_byte, query);
-//     last_byte += bytes_written_question;
-//     dns->QDCOUNT=htons(1); //Query count
-
-//     //Answer section
-//     unsigned int bytes_written_answer = write_answer(last_byte, query, ip_answer);
-//     last_byte += bytes_written_answer; 
-//     dns->ANCOUNT=htons(1); //Answer count
-
-//     //Authorative section
-//     //char *name_server = "\2ns\7example\3com";
-    
-//     unsigned int bytes_written_authorative_answer = write_authorative_answer(last_byte, name_server);
-//     last_byte += bytes_written_authorative_answer;
-//     dns->NSCOUNT=htons(1); //Name Server count
-    
-
-//     unsigned int bytes_written_sum =  bytes_written_question + bytes_written_answer + bytes_written_authorative_answer;
-//     unsigned short int packetquery_len =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+ bytes_written_sum );
-//     ip->iph_len=htons(packetquery_len);
-//     udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+bytes_written_sum);
-
-//     ip->iph_chksum = csum((unsigned short *)buffer, sizeof(struct ipheader) + sizeof(struct udpheader));
-//     udp->udph_chksum=check_udp_sum(buffer, packetquery_len-sizeof(struct ipheader));
-
-//     return packetquery_len;
-// }
-
-
-
 
 
 
@@ -446,7 +371,7 @@ unsigned int generate_dns_answer (
     
     
 
-    unsigned int bytes_written_authorative_answer = write_authorative_answer(last_byte, name_server);
+    unsigned int bytes_written_authorative_answer = write_authorative_answer(last_byte, query,name_server);
     last_byte += bytes_written_authorative_answer;
     dns->NSCOUNT=htons(1); //Name Server count
     
@@ -461,12 +386,6 @@ unsigned int generate_dns_answer (
 
     return packetquery_len;
 }
-
-
-
-
-;
-
 
 
 
