@@ -442,7 +442,7 @@ unsigned int generate_dns_answer (
     dns->ANCOUNT=htons(1); //Answer count
 
     //Authorative section
-    char *name_server = "\2ns\xE0dnslabattacker\3net";
+    char *name_server = "\2ns\16dnslabattacker\3net";
     
     
 
