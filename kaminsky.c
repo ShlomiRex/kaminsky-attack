@@ -228,7 +228,6 @@ unsigned int write_authorative_answer(void *buffer, char *query_domain, char *na
 
     //Rdata (Name Server)
     strcpy(buffer, name_server);
-    printf("Name server = %s Len = %d\n", name_server, ns_len);
     bytes_written += ns_len; //nameserver
 
     return bytes_written;
@@ -319,7 +318,7 @@ unsigned int generate_dns_answer (
     char *query, 
     char *ip_answer, 
     char *dst_buffer,
-    long *txid_ptr) 
+    unsigned short **txid_ptr) 
 {
 
     char *buffer = dst_buffer;
@@ -347,7 +346,7 @@ unsigned int generate_dns_answer (
 	dns->flags=htons(FLAG_R);
     //Random transaction ID
     dns->query_id=rand();
-
+    
     *txid_ptr = &(dns->query_id);
 
     //Points to the last byte written
@@ -451,7 +450,7 @@ int main(int argc, char *argv[])
     unsigned int packet_len = 0;
 
     //Pointer to the DNS TXID field (to change it later)
-    long *txid_ptr; //points to buffer
+    unsigned short *txid_ptr; //points to buffer
 
     char query[18];
     strcpy(query, "\4????\7example\3com");
@@ -484,7 +483,6 @@ int main(int argc, char *argv[])
             printf("packet send error %d which means %s\n",errno,strerror(errno));
         }
         printf("Sent!\n");
-
         *txid_ptr = -1;
     }
     
