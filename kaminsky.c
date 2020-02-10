@@ -494,7 +494,6 @@ int main(int argc, char **argv)
             printf("Sent %d bytes!\n", bytes_sent);
             //*txid_ptr = (*txid_ptr) + htons(1); //htons is very important! Big edian only!
             uint16_t tmp = ntohs(*txid_ptr);
-            printf("tmp = %d\n",tmp);
             tmp += 1;
             *txid_ptr = htons(tmp);
         }
