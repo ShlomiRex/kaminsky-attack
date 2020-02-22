@@ -486,7 +486,7 @@ int main(int argc, char **argv)
 
         printf("Sending flood answer packets...\n");
         //Guess loop (trying to guess TXID)
-        uint64_t bytes_sent = 0;
+        ssize_t bytes_sent = 0;
         for(int j = 0; j < guesses; j++) {
             if( (bytes_sent = sendto(sd, buffer, packet_len, 0, (struct sockaddr *)&sin, sizeof(sin))) < 0) {
                 printf("packet send error %d which means %s\n",errno,strerror(errno));
